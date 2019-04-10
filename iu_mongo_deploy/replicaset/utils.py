@@ -19,7 +19,7 @@ class ContainerExistException(Exception):
     pass
 
 
-def start_replica(env, replica):
+def start_replica(env, replica, auth=True):
     try:
         replica_config = __CONFIGS[env][replica]
     except Exception:
@@ -42,10 +42,18 @@ def start_replica(env, replica):
         target='/data/configdb',
         source='configdb_empty'
     )
+    command = [
+        'mongod'
+    ]
+    if auth:
+        command.append('--auth')
+    command.extend([
+        '--replSet',
+        replica_name
+    ])
     container = client.containers.run('mongo:%s' % mongo_version,
                                       detach=True,
-                                      command=[
-                                          'mongod', '--replSet', replica_name],
+                                      command=command,
                                       mounts=[data_mount, config_mount],
                                       ports={"27017": "27017"},
                                       name=container_name)
