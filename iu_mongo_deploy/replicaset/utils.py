@@ -19,19 +19,26 @@ class ContainerExistException(Exception):
     pass
 
 
-def start_replica(env, replica, auth=True):
+def start_replica(env, replica, auth=False, node=None, port=27017):
     try:
         replica_config = __CONFIGS[env][replica]
     except Exception:
         raise ConfigNotFoundException(
             'Confiugration not found for replica "%s" and env "%s"' % (replica, env))
-    container_name = volume_name = replica_name = replica_config.name
+    replica_name = replica_config.name
+    if node is not None:
+        volume_name = container_name = replica_name+'_node%d' % node
+    else:
+        volume_name = container_name = replica_name
     mongo_version = replica_config.mongo_version
     client = docker.from_env()
     try:
-        if client.containers.get(container_name):
-            raise ContainerExistException(
-                'Container "%s" with name exists.' % container_name)
+        container = client.containers.get(container_name)
+        if container:
+            print('Container "%s" with name exists, remove it first...' %
+                  container_name)
+            container.stop()
+            container.remove()
     except docker.errors.NotFound:
         pass
     data_mount = Mount(
@@ -55,18 +62,21 @@ def start_replica(env, replica, auth=True):
                                       detach=True,
                                       command=command,
                                       mounts=[data_mount, config_mount],
-                                      ports={"27017": "27017"},
+                                      ports={"27017": str(port)},
                                       name=container_name)
     return container
 
 
-def stop_replica(env, replica):
+def stop_replica(env, replica, node=None):
     try:
         replica_config = __CONFIGS[env][replica]
     except Exception:
         raise ConfigNotFoundException(
             'Confiugration not found for replica "%s" and env "%s"' % (replica, env))
-    container_name = replica_config.name
+    if node is not None:
+        container_name = replica_config.name+'_node%d' % node
+    else:
+        container_name = replica_config.name
     client = docker.from_env()
     try:
         container = client.containers.get(container_name)
